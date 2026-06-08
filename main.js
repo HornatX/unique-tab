@@ -79,7 +79,8 @@ function activateLeafByPath(app, path, linktext = null, ignoreLeaf = null, delay
     if (foundLeaf) return;
     if (ignoreLeaf && leaf === ignoreLeaf) return;
     const viewState = leaf.getViewState();
-    const isMatch = viewState.state && viewState.state.file === path;
+    const leafFile = viewState.state && viewState.state.file;
+    const isMatch = typeof leafFile === "string" && leafFile.length > 0 && leafFile === path;
     if (isMatch) foundLeaf = leaf;
   });
   if (foundLeaf) {

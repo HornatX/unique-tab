@@ -91,9 +91,12 @@ function activateLeafByPath(app: App, path: string, linktext: string | null = nu
         
         // 【核心修改点】：不再限制只对 markdown 和 kanban 生效。
         // 只要这个标签页当前绑定的文件路径等于我们要打开的路径，直接判定为匹配！
+        // 额外校验 file 必须是非空字符串，防止 undefined/空值误匹配
+        const leafFile = viewState.state && viewState.state.file;
         const isMatch = 
-            viewState.state &&
-            viewState.state.file === path;
+            typeof leafFile === 'string' &&
+            leafFile.length > 0 &&
+            leafFile === path;
 
         if (isMatch) foundLeaf = leaf;
     });
