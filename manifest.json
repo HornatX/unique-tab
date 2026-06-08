@@ -1,7 +1,7 @@
 {
 	"id": "unique-tab",
 	"name": "Unique Tab",
-	"version": "1.0.2",
+	"version": "1.0.3",
 	"minAppVersion": "1.0.0",
 	"description": "Ensures each note is opened in only one tab, preventing duplicates and keeping your workspace clean.",
 	"author": "hornat",

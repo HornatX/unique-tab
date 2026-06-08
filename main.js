@@ -26,13 +26,6 @@ var import_obsidian = require("obsidian");
 var NoDuplicatePlugin = class extends import_obsidian.Plugin {
   async onload() {
     console.log("No Duplicate Leaves (Optimized for ALL file types) loaded");
-    const styleEl = document.createElement("style");
-    styleEl.dataset.uniqueTab = "true";
-    styleEl.textContent = ".unique-tab-hidden { display: none !important; }";
-    document.head.appendChild(styleEl);
-    this.register(() => {
-      document.head.querySelector("style[data-unique-tab]")?.remove();
-    });
     this.register(
       around(import_obsidian.Workspace.prototype, {
         openLinkText: (next) => {

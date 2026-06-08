@@ -15,15 +15,6 @@ export default class NoDuplicatePlugin extends Plugin {
     async onload() {
         console.log("No Duplicate Leaves (Optimized for ALL file types) loaded");
 
-        // 注入隐藏样式（通过 CSS 类，避免内联样式）
-        const styleEl = document.createElement('style');
-        styleEl.dataset.uniqueTab = 'true';
-        styleEl.textContent = '.unique-tab-hidden { display: none !important; }';
-        document.head.appendChild(styleEl);
-        this.register(() => {
-            document.head.querySelector('style[data-unique-tab]')?.remove();
-        });
-
         // 1. 拦截 openLinkText (通过链接点击打开)
         this.register(
             around(Workspace.prototype, {
