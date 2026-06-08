@@ -26,18 +26,25 @@ var import_obsidian = require("obsidian");
 var NoDuplicatePlugin = class extends import_obsidian.Plugin {
   async onload() {
     console.log("No Duplicate Leaves (Optimized for ALL file types) loaded");
+    const styleEl = document.createElement("style");
+    styleEl.dataset.uniqueTab = "true";
+    styleEl.textContent = ".unique-tab-hidden { display: none !important; }";
+    document.head.appendChild(styleEl);
+    this.register(() => {
+      document.head.querySelector("style[data-unique-tab]")?.remove();
+    });
     this.register(
       around(import_obsidian.Workspace.prototype, {
         openLinkText: (next) => {
-          const plugin = this;
+          const app = this.app;
           return function(linktext, sourcePath, newLeaf, openViewState) {
             if (newLeaf) return next.call(this, linktext, sourcePath, newLeaf, openViewState);
-            const targetFile = plugin.app.metadataCache.getFirstLinkpathDest(
+            const targetFile = app.metadataCache.getFirstLinkpathDest(
               (0, import_obsidian.getLinkpath)(linktext),
               sourcePath
             );
             if (targetFile) {
-              if (activateLeafByPath(plugin.app, targetFile.path, linktext)) return;
+              if (activateLeafByPath(app, targetFile.path, linktext)) return;
             }
             return next.call(this, linktext, sourcePath, newLeaf, openViewState);
           };
@@ -47,17 +54,17 @@ var NoDuplicatePlugin = class extends import_obsidian.Plugin {
     this.register(
       around(import_obsidian.WorkspaceLeaf.prototype, {
         openFile: (next) => {
-          const plugin = this;
+          const app = this.app;
           return function(file, openState) {
-            const leafFound = activateLeafByPath(plugin.app, file.path, null, this, true);
+            const leafFound = activateLeafByPath(app, file.path, null, this, true);
             if (leafFound) {
               const isNewEmptyLeaf = this.view && !this.view.file && this.view.getViewType() === "empty";
               if (isNewEmptyLeaf) {
                 const containerEl = this.containerEl;
                 if (containerEl) {
-                  containerEl.style.display = "none";
+                  containerEl.addClass("unique-tab-hidden");
                 }
-                setTimeout(() => {
+                window.setTimeout(() => {
                   this.detach();
                 }, 0);
               }
@@ -79,22 +86,23 @@ function activateLeafByPath(app, path, linktext = null, ignoreLeaf = null, delay
     if (foundLeaf) return;
     if (ignoreLeaf && leaf === ignoreLeaf) return;
     const viewState = leaf.getViewState();
-    const leafFile = viewState.state && viewState.state.file;
+    const leafFile = viewState.state?.file;
     const isMatch = typeof leafFile === "string" && leafFile.length > 0 && leafFile === path;
     if (isMatch) foundLeaf = leaf;
   });
   if (foundLeaf) {
+    const leaf = foundLeaf;
     if (delay) {
-      setTimeout(() => {
-        app.workspace.setActiveLeaf(foundLeaf, { focus: true });
+      window.setTimeout(() => {
+        app.workspace.setActiveLeaf(leaf, { focus: true });
       }, 10);
     } else {
-      app.workspace.setActiveLeaf(foundLeaf, { focus: true });
+      app.workspace.setActiveLeaf(leaf, { focus: true });
     }
     if (linktext) {
-      const viewState = foundLeaf.getViewState();
+      const viewState = leaf.getViewState();
       if (viewState.type === "markdown") {
-        setTimeout(() => scrollToElement(app, linktext, foundLeaf), 20);
+        window.setTimeout(() => scrollToElement(app, linktext, leaf), 20);
       }
     }
     return true;

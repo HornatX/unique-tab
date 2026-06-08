@@ -9,27 +9,38 @@ import {
     OpenViewState
 } from "obsidian";
 
+type AnyFunction = (...args: unknown[]) => unknown;
+
 export default class NoDuplicatePlugin extends Plugin {
     async onload() {
         console.log("No Duplicate Leaves (Optimized for ALL file types) loaded");
 
+        // 注入隐藏样式（通过 CSS 类，避免内联样式）
+        const styleEl = document.createElement('style');
+        styleEl.dataset.uniqueTab = 'true';
+        styleEl.textContent = '.unique-tab-hidden { display: none !important; }';
+        document.head.appendChild(styleEl);
+        this.register(() => {
+            document.head.querySelector('style[data-unique-tab]')?.remove();
+        });
+
         // 1. 拦截 openLinkText (通过链接点击打开)
         this.register(
             around(Workspace.prototype, {
-                openLinkText: (next: any) => {
-                    const plugin = this; // 缓存插件实例以获取 plugin.app
+                openLinkText: (next: AnyFunction) => {
+                    const app = this.app;
                     return function (this: Workspace, linktext: string, sourcePath: string, newLeaf?: boolean | "split" | "tab" | "window", openViewState?: OpenViewState) {
-                        if (newLeaf) return next.call(this, linktext, sourcePath, newLeaf, openViewState);
+                        if (newLeaf) return next.call(this, linktext, sourcePath, newLeaf, openViewState) as Promise<void>;
 
-                        const targetFile = plugin.app.metadataCache.getFirstLinkpathDest(
+                        const targetFile = app.metadataCache.getFirstLinkpathDest(
                             getLinkpath(linktext),
                             sourcePath
                         );
 
                         if (targetFile) {
-                            if (activateLeafByPath(plugin.app, targetFile.path, linktext)) return;
+                            if (activateLeafByPath(app, targetFile.path, linktext)) return;
                         }
-                        return next.call(this, linktext, sourcePath, newLeaf, openViewState);
+                        return next.call(this, linktext, sourcePath, newLeaf, openViewState) as Promise<void>;
                     };
                 },
             })
@@ -38,11 +49,11 @@ export default class NoDuplicatePlugin extends Plugin {
         // 2. 拦截 openFile (通过文件树或快速切换打开)
         this.register(
             around(WorkspaceLeaf.prototype, {
-                openFile: (next: any) => {
-                    const plugin = this;
+                openFile: (next: AnyFunction) => {
+                    const app = this.app;
                     return function (this: WorkspaceLeaf, file: TFile, openState?: OpenViewState) {
                         // 尝试跳转到旧标签页
-                        const leafFound = activateLeafByPath(plugin.app, file.path, null, this, true);
+                        const leafFound = activateLeafByPath(app, file.path, null, this, true);
                         
                         if (leafFound) {
                             // 检查当前 leaf 是否是新创建的空 leaf
@@ -50,15 +61,15 @@ export default class NoDuplicatePlugin extends Plugin {
                             const isNewEmptyLeaf = this.view && !this.view.file && this.view.getViewType() === "empty";
                             
                             if (isNewEmptyLeaf) {
-                                // 【极速隐身】
+                                // 【极速隐身】使用 CSS 类而非内联样式
                                 // @ts-ignore: containerEl 属于未完全暴露的 DOM API
                                 const containerEl = this.containerEl as HTMLElement;
                                 if (containerEl) {
-                                    containerEl.style.display = "none";
+                                    containerEl.addClass('unique-tab-hidden');
                                 }
                                 
                                 // 立即销毁
-                                setTimeout(() => {
+                                window.setTimeout(() => {
                                     this.detach(); 
                                 }, 0);
                             }
@@ -66,7 +77,7 @@ export default class NoDuplicatePlugin extends Plugin {
                             return Promise.resolve(); 
                         }
 
-                        return next.call(this, file, openState);
+                        return next.call(this, file, openState) as Promise<void>;
                     };
                 },
             })
@@ -89,10 +100,8 @@ function activateLeafByPath(app: App, path: string, linktext: string | null = nu
 
         const viewState = leaf.getViewState();
         
-        // 【核心修改点】：不再限制只对 markdown 和 kanban 生效。
-        // 只要这个标签页当前绑定的文件路径等于我们要打开的路径，直接判定为匹配！
         // 额外校验 file 必须是非空字符串，防止 undefined/空值误匹配
-        const leafFile = viewState.state && viewState.state.file;
+        const leafFile = viewState.state?.file;
         const isMatch = 
             typeof leafFile === 'string' &&
             leafFile.length > 0 &&
@@ -102,21 +111,22 @@ function activateLeafByPath(app: App, path: string, linktext: string | null = nu
     });
 
     if (foundLeaf) {
+        const leaf = foundLeaf;
         // 延迟解决焦点抢占
         if (delay) {
-            setTimeout(() => {
-                app.workspace.setActiveLeaf(foundLeaf as WorkspaceLeaf, { focus: true });
+            window.setTimeout(() => {
+                app.workspace.setActiveLeaf(leaf, { focus: true });
             }, 10);
         } else {
-            app.workspace.setActiveLeaf(foundLeaf, { focus: true });
+            app.workspace.setActiveLeaf(leaf, { focus: true });
         }
 
         // 如果是通过链接点过来的（带有 # 标题定位），且目标是普通笔记，才执行滚动跳转
         if (linktext) {
-             const viewState = (foundLeaf as WorkspaceLeaf).getViewState();
+             const viewState = leaf.getViewState();
              // 白板和数据库通常不支持这种滚动锚点，所以这里保留 markdown 限制以防报错
              if (viewState.type === "markdown") {
-                 setTimeout(() => scrollToElement(app, linktext, foundLeaf as WorkspaceLeaf), 20);
+                 window.setTimeout(() => scrollToElement(app, linktext, leaf), 20);
              }
         }
         return true;
@@ -157,9 +167,9 @@ function scrollToElement(app: App, linktext: string, leaf: WorkspaceLeaf) {
 
 // 代理拦截函数 (Monkey Patching)
 // 返回一个清理函数，供 this.register 注册，确保在插件禁用时能够正确卸载钩子
-function around(obj: any, factories: any): () => void {
+function around(obj: Record<string, unknown>, factories: Record<string, (original: AnyFunction) => AnyFunction>): () => void {
     const removers = Object.keys(factories).map((key) => {
-        const prev = obj[key];
+        const prev = obj[key] as AnyFunction;
         const next = factories[key](prev);
         const original = prev;
         obj[key] = next;
