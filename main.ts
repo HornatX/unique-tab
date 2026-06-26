@@ -43,6 +43,9 @@ export default class NoDuplicatePlugin extends Plugin {
                 openFile: (next: AnyFunction) => {
                     const app = this.app;
                     return function (this: WorkspaceLeaf, file: TFile, openState?: OpenViewState) {
+                        // 豁免：当调用方传了 eState 时，放行不拦截，确保状态正确传递
+                        if (openState?.eState) return next.call(this, file, openState) as Promise<void>;
+
                         // 尝试跳转到旧标签页
                         const leafFound = activateLeafByPath(app, file.path, null, this, true);
                         
